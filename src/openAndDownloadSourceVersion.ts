@@ -24,23 +24,6 @@ export async function openAndDownloadSourceVersion(browser: puppeteer.Browser, v
           
         console.info(`Loaded WhatsApp WEB version ${version}`);
       }, 1000);
-      page.on('request', async (request) => {
-        if(request.url().match(/^https:\/\/(web\.whatsapp\.com|static\.whatsapp\.net)\//)) {
-            const fileName = path.basename(url.parse(request.url()).pathname!);
-
-            const filePathSource = path.join(WA_DIR_SOURCE, `${fileName}`);
-            const response = await request.response();
-    
-            if (fileName.endsWith('.js')) {
-                const body = await response?.buffer();
-                console.log(response);
-                if(typeof body !== 'undefined') {
-                    fs.writeFileSync(filePathSource, body);
-                    console.info(`Downloading file ${fileName} from version ${version}`);
-                }
-            }
-        }
-      })
     });
     
 }
@@ -73,6 +56,7 @@ export async function setWhatsappVersion(
     page: puppeteer.Page,
     version: string,
   ) {
+    const pathFolder = path.resolve(__dirname, `../sources/${version}`);
     let body: string | null = null;
     try {
       body = waversion.getPageContent(version);
@@ -85,19 +69,37 @@ export async function setWhatsappVersion(
   
     await page.setRequestInterception(true);
   
-    page.on('request', (req) => {
+    page.on('request', async (req) => {
       if (req.url().startsWith('https://web.whatsapp.com/check-update')) {
         req.abort();
         return;
       }
-      else if (req.url() !== 'https://web.whatsapp.com/') {
-        req.continue();
-        return;
-      }
+      else if (req.url() === 'https://web.whatsapp.com/') {
         req.respond({
           status: 200,
           contentType: 'text/html',
           body: body,
         });
+      } 
+      else if(req.resourceType() === 'script') {
+        req.continue();
+        const fileName = path.basename(url.parse(req.url()).pathname!);
+        console.log(fileName);
+
+        const filePathSource = path.join(pathFolder, `${fileName}`);
+        const response = req.response();
+        await response?.text().then((body) => {
+            if(!body) return;
+            if(typeof body !== 'undefined') {
+                fs.writeFileSync(filePathSource, body);
+                console.info(`Downloading file ${fileName} from version ${version}`);
+            }
+
+        }).catch((err) => 
+        console.log(err));
+    } else {
+        req.continue();
+        return;
+      }
     });
   }

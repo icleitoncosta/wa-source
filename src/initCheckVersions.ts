@@ -10,6 +10,7 @@ export async function initCheckVersions() {
     const versions = waversion.getAvailableVersions();
     const browser = await puppeteer.launch({
         headless: false,
+        devtools: true,
     });
     // Check and download 
     for (const version of versions) {
